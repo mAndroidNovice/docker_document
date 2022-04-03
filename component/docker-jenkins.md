@@ -71,4 +71,23 @@ http://ip:10240
 docker exec -it mJenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
-
+### (6) 常见问题
+#### 1 进入容器后发现无法使用docker
+```shell
+docker exec -it mJenkins /bin/bash
+docker ps -a
+```
+发现报错如下
+Got permission denied while trying to connect to the Docker daemon
+##### 解决方法
+```shell
+# 以root用户登录过
+docker exec -it -u mJenkins /bin/bash
+# 创建docker用户组
+groupadd docker
+# jenkins用户添加到用户组中
+usermod -a -G docker jenkins
+# 给docker.sock添加授权
+chmod 777 /var/run/docker.sock
+```
+后续使用jenkins用户登录即可使用
