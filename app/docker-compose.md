@@ -20,8 +20,6 @@ docker-compose -version
 rm /usr/local/bin/docker-compose
 ```
 
-
-
 ### 三、 使用docker compose编排nginx+springboot项目
 
 1. 创建docker-compose目录
@@ -32,7 +30,10 @@ cd ~/docker-compose
 ```
 
 2. 编写 docker-compose.yml 文件
-
+```shell
+# dockercompose 具体文档
+https://docs.docker.com/compose/compose-file/compose-file-v3/
+```
 ```shell
 version: '3'
 services:

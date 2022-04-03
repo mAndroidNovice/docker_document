@@ -1,49 +1,123 @@
-#Docker-Nexus3配置
+# Docker-Nexus3配置
+
 ## 1.nexus3安装与配置
+
 ### (1)nexus3 docker hub地址
+
 ```shell
 https://registry.hub.docker.com/r/sonatype/nexus3
 ```
-### (2)配置nexus3存储空间
+
+nexus3 System配置要求
+
 ```shell
-docker volume create --name nexus-data
+https://help.sonatype.com/repomanager3/product-information/system-requirements
 ```
-### (3)安装镜像
+
+### (2)安装镜像
+
 ```shell
-mkdir -p /var/jenkins_home
-chmod 777 /var/jenkins_home
-docker run -d --name mjenkins -p 10240:8080 -p 10241:50000 --network jenkins \
-    -e JAVA_OPTS=-Duser.timezone=Asia/Shanghai \
-    -v /etc/localtime:/etc/localtime \
-    -v /usr/bin/docker:/usr/bin/docker \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -v /var/jenkins_home:/var/jenkins_home  \
-    jenkins/jenkins:lts-jdk11
-# -v /var/jenkins_home:/var/jenkins_home目录为容器jenkins工作目录，我们将硬盘上的一个目录挂载到这个位置，方便后续更新镜像后继续使用原来的工作目录。这里我们设置的就是上面我们创建的 /var/jenkins_home目录
-# -v /etc/localtime:/etc/localtime让容器使用和服务器同样的时间设置。
-# -v /usr/bin/docker:/usr/bin/docker -v /var/run/docker.sock:/var/run/docker.sock   设置docker
-# 不需要使用默认自带jdk11 -v /usr/bin/mv:/usr/bin/mv -v /usr/local/java/jdk1.8.0_271/bin:/usr/local/java/jdk1.8.0_271/bin 设置jdk
-# -v /usr/local/maven3.6:/usr/local/maven3.6  设置maven
-
-
-
+#  configuration, logs, and storage
+mkdir -p /var/nexus-data
+chmod 777 /var/nexus-data
+docker run -d --name mnexus3 -p 11241:8081 -p 11242:8082 -p 11243:8083 -p 11244:8084 -p 11245:8085 \
+-e NEXUS_CONTEXT=nexus \
+-e INSTALL4J_ADD_VM_PARAMS="-Xms2703m -Xmx2703m -XX:MaxDirectMemorySize=2703m -Djava.util.prefs.userRoot=/var/nexus-data/javaprefs" \
+-v /var/nexus-data:/nexus-data \
+sonatype/nexus3:3.38.1
+# NEXUS_CONTEXT=nexus  Nexus Context Path 默认 /
+# INSTALL4J_ADD_VM_PARAMS vm最低配置详情查看(1) userRoot-> persistent path
+# /var/nexus-data  Persistent Data -> configuration, logs, and storage
+# 内存不够大的学生机不要头铁 改小点 java内存使用量
+docker run -d --name mnexus3 -p 11241:8081 -p 11242:8082 -p 11243:8083 -p 11244:8084 -p 11245:8085 \
+-e NEXUS_CONTEXT=nexus \
+-e INSTALL4J_ADD_VM_PARAMS="-Xms512m -Xmx512m -XX:MaxDirectMemorySize=512m -Djava.util.prefs.userRoot=/var/nexus-data/javaprefs" \
+-v /var/nexus_data:/nexus-data \
+sonatype/nexus3:3.38.1
 ```
-### (4)访问jenkins
+
+### (3)访问jenkins
+
 ```shell
-http://120.53.120.254:10240
+# nexus 即为 NEXUS_CONTEXT
+curl http://localhost:11240/nexus
+# 查看密码
+cat /var/nexus_data/admin.password |grep -v "^$"
 ```
-### (5)切换国内jenkins镜像
-因为国外镜像经常出现下载失败的问题，所以切换为国内镜像。
-方法一
+
+### (4)停止
+
+因为nexus比较慢 关闭时需要加一点延迟 防止数据丢失
+
 ```shell
-vim /var/lib/docker/volumes/jenkins_home/_data/hudson.model.UpdateCenter.xml
-# 将镜像地址改为如下
-https://mirrors.tuna.tsinghua.edu.cn/jenkins/updates/update-center.json
-# 保存后重启 jenkins
-docker restart mjenkins
+docker stop --time=120 <CONTAINER_NAME>
 ```
-方法二
-系统管理 --> 插件管理 --> Advanced --> 高级选项卡 --> 更新网站
-更新为上述镜像地址
 
+### (5) maven配置settings
 
+配置仓库地址 是public group仓库地址而不是releases或snapshots仓库，public默认包含了这两个仓库
+
+```xml
+
+<settings>
+    <profiles>
+        <profile>
+            <id>dev</id>
+            <repositories>
+                <repository>
+                    <id>local-nexus</id>
+                    <url>http://ip:10241/repository/maven-public/</url>
+                    <releases>
+                        <enabled>true</enabled>
+                    </releases>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                </repository>
+            </repositories>
+        </profile>
+    </profiles>
+
+    <activeProfiles>
+        <activeProfile>dev</activeProfile>
+    </activeProfiles>
+</settings>
+```
+
+配置maven settings文件的服务器用户名密码 注意：id为私服中releases和snapshots仓库名，必须一致
+
+```xml
+
+<servers>
+    <server>
+        <id>maven-releases</id>
+        <username>admin</username>
+        <password>admin123</password>
+    </server>
+    <server>
+        <id>maven-snapshots</id>
+        <username>admin</username>
+        <password>admin123</password>
+    </server>
+</servers>
+```
+
+在项目父pom文件中配置部署环境，注意id及URL必须与nexus仓库对应
+
+```xml
+<!--私服仓库-->
+<distributionManagement>
+    <repository>
+        <id>maven-releases</id>
+        <name>Nexus Release Repository</name>
+        <url>http://ip:10241/repository/maven-releases/</url>
+    </repository>
+    <snapshotRepository>
+        <id>maven-snapshots</id>
+        <name>Nexus Snapshot Repository</name>
+        <url>http://ip:10241/repository/maven-snapshots/</url>
+    </snapshotRepository>
+</distributionManagement>
+```
+
+重新打开项目，对需要的模块进行deploy
